@@ -19,6 +19,12 @@ public:
 private:
     Ui::ProfileCreator *ui;
     ProfileDAO* dao;
+
+signals:
+    void creatorClosed();
+
+private slots:
+    void on_createProfile_clicked();
 };
 
 #endif // PROFILECREATOR_H
