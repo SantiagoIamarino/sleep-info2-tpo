@@ -1,4 +1,4 @@
-QT       += core gui sql
+QT       += core gui sql charts widgets network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -11,7 +11,10 @@ CONFIG += c++17
 SOURCES += \
     main.cpp \
     src/logic/profiledao.cpp \
+    src/ui/liveclient/liveclient.cpp \
     src/ui/mainwindow.cpp \
+    src/ui/pagehistorial/pagehistorial.cpp \
+    src/ui/pageajustes/pageajustes.cpp \
     src/ui/profileselector.cpp \
     src/ui/profilecreator.cpp \
     src/utils/database.cpp
@@ -19,7 +22,10 @@ SOURCES += \
 HEADERS += \
     src/logic/profiledao.h \
     src/models/profile.h \
+    src/ui/liveclient/liveclient.h \
     src/ui/mainwindow.h \
+    src/ui/pagehistorial/pagehistorial.h \
+    src/ui/pageajustes/pageajustes.h \
     src/ui/profileselector.h \
     src/ui/profilecreator.h \
     src/utils/database.h

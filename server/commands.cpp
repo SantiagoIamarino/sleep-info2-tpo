@@ -5,17 +5,21 @@
 #include "commands.h"
 #include "info_fisio.h"
 
+static int ESP32_fd = -1;
+static sockaddr_in ESP32_addr{};
 
 enum class TipoMensaje {
     INFO_FISIO,
     ACK_CONFIG,
     PING,
     REQ_CONFIG,
+    CFG_UPDATE,
     UNKNOWN
 };
 
 TipoMensaje detectarTipo(const char* buf) {
     if (strncmp(buf, "<REQ_CONFIG>", 12) == 0)      return TipoMensaje::REQ_CONFIG;
+    if (strncmp(buf, "<CFG_UPDATE:", 12) == 0)      return TipoMensaje::CFG_UPDATE;
     if (strncmp(buf, "<INFO_FISIO:", 12) == 0) return TipoMensaje::INFO_FISIO;
     if (strncmp(buf, "<ACK_REQ_CONFIG>", 16) == 0) return TipoMensaje::ACK_CONFIG;
     if (strncmp(buf, "<PING>", 6) == 0) return TipoMensaje::PING;
@@ -24,7 +28,7 @@ TipoMensaje detectarTipo(const char* buf) {
 
 static inline const char* b2s(bool b) { return b ? "0TRUE" : "FALSE"; }
 
-bool responderConfigUDP(int sockfd, const sockaddr_in& dst) {
+bool responderConfigUDP(int sockfd, const sockaddr_in& dst, bool es_update) {
     sqlite3* db = db::Connection::instance().raw();
     if (!db) {
         const char* err = "<ERR:DB_NOT_OPEN>";
@@ -71,13 +75,18 @@ bool responderConfigUDP(int sockfd, const sockaddr_in& dst) {
 
         // formato: <CFG:PF_ID=01;HORAS_SUENIO=08;ALARMA_ON=TRUE;LUZ_ON=FALSE>
         char payload[96];
-        snprintf(payload, sizeof(payload),
+        if(!es_update) {
+            //  mandar un ACK primero
+            const char* ack = "<ACK_REQ_CONFIG>";
+            sendto(sockfd, ack, strlen(ack), 0, (const sockaddr*)&dst, sizeof(dst));
+            snprintf(payload, sizeof(payload),
                  "<CFG:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s>",
                  profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0));
-
-        //  mandar un ACK primero
-        const char* ack = "<ACK_REQ_CONFIG>";
-        sendto(sockfd, ack, strlen(ack), 0, (const sockaddr*)&dst, sizeof(dst));
+        } else {
+            snprintf(payload, sizeof(payload),
+                 "<CFG_UPDATE:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s>",
+                 profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0));
+        }
 
         ssize_t sent = sendto(sockfd, payload, strlen(payload), 0,
                               (const sockaddr*)&dst, sizeof(dst));
@@ -100,9 +109,18 @@ void procesarMensaje(const char* buf, int sockfd, const sockaddr_in& srcAddr) {
             responderConfigUDP(sockfd, srcAddr);
             break;
 
+        case TipoMensaje::CFG_UPDATE:
+            std::cout << "[CFG_UPDATE] Actualizacion de configuracion recibida: " << buf << "\n";
+            // Responder con la nueva config
+            if(ESP32_fd != -1) {
+                responderConfigUDP(ESP32_fd, ESP32_addr, true);
+            }
+            break;
+
         case TipoMensaje::INFO_FISIO: {
             if (validarInfoFisio(buf)) {
                 guardarInfoFisio(buf);
+                enviarLiveDataCliente(sockfd, buf);
             } else {
                 std::cerr << "[WARN] Formato invalido en INFO_FISIO: " << buf << "\n";
             }
@@ -115,6 +133,14 @@ void procesarMensaje(const char* buf, int sockfd, const sockaddr_in& srcAddr) {
 
         case TipoMensaje::PING:
             std::cout << "[PING] Keepalive recibido.\n";
+            // responder con un PONG
+            {
+                const char* pong = "<PONG>";
+                sendto(sockfd, pong, strlen(pong), 0,
+                       (const sockaddr*)&srcAddr, sizeof(srcAddr));
+                ESP32_fd = sockfd;
+                ESP32_addr = srcAddr;
+            }
             break;
 
         case TipoMensaje::UNKNOWN:

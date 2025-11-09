@@ -16,12 +16,21 @@ int main(int argc, char *argv[])
     ProfileSelector p(&db);
     p.show();
 
+    // Cuando selecciona un perfil, paso a main
     QObject::connect(&p, &ProfileSelector::profileSelected,
-        [&p, &db](int profileId){
-            p.hide();
-            auto mainWindow = new MainWindow(&db, profileId);
-            mainWindow->show();
+    [&p, &db](int profileId){
+        p.hide();
+        auto mainWindow = new MainWindow(&db, profileId);
+        mainWindow->setAttribute(Qt::WA_DeleteOnClose);
+        mainWindow->show();
+
+        // Cuando se clickea en "Perfiles", paso a el selector nuevamente
+        QObject::connect(mainWindow, &MainWindow::volverAPerfiles,
+             [mainWindow, &p]() {
+                 mainWindow->close();
+                 p.show();
         });
+    });
 
     return a.exec();
 }

@@ -51,3 +51,12 @@ bool guardarInfoFisio(const char* buf) {
     sqlite3_finalize(st);
     return true;
 }
+
+bool enviarLiveDataCliente(int sockfd, const char* buf) {
+    // crear JSON con los datos recibidos {"type":"INFO_FISIO","ppm":123}
+    int ppm = 0;
+    sscanf(buf, "<INFO_FISIO:PF_ID=%*d;PPM=%d>", &ppm);
+    std::string json = "{\"type\":\"INFO_FISIO\",\"ppm\":" + std::to_string(ppm) + "}";
+    sendJsonToUI(sockfd, json);
+    return true;
+}

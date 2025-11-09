@@ -7,6 +7,8 @@
 #include "db.h"
 #include "commands.h"
 
+static const uint16_t UI_UDP_PORT  = 6005;
+
 static volatile bool running = true;
 
 void handle_sigint(int) {

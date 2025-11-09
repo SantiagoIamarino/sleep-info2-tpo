@@ -4,9 +4,15 @@
 #include <QMainWindow>
 #include "../utils/database.h"
 
+class QListWidget;
+class QStackedWidget;
+class QLabel;
+class QPlainTextEdit;
+class Database;
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
-class MainWindow;
+    class MainWindow;
 }
 QT_END_NAMESPACE
 
@@ -18,7 +24,30 @@ public:
     MainWindow(Database* db, int profileId, QWidget *parent = nullptr);
     ~MainWindow();
 
+private slots:
+    void onNavChanged(int row);
+
 private:
-    Ui::MainWindow *ui;
+    Database* db_ = nullptr;
+    int        profileId_ = -1;
+
+    QListWidget*    nav_   = nullptr;
+    QStackedWidget* pages_ = nullptr;
+
+    QWidget* pagePerfiles_  = nullptr;
+    QWidget* pageLive_      = nullptr;
+    QWidget* pageHistorial_ = nullptr;
+    QWidget* pageAjustes_   = nullptr;
+
+    QLabel*        lblPPM_ = nullptr;       // para “datos en vivo”
+    QPlainTextEdit* logLive_ = nullptr;
+
+    QWidget* buildPerfilesPage();
+    QWidget* buildLivePage();
+    void StartLiveClient();
+
+signals:
+    void volverAPerfiles();
 };
+
 #endif // MAINWINDOW_H

@@ -9,5 +9,5 @@
 
 // ========================
 
-bool responderConfigUDP(int sockfd, const sockaddr_in& dst);
+bool responderConfigUDP(int sockfd, const sockaddr_in& dst, bool es_update = false);
 void procesarMensaje(const char* buf, int sockfd, const sockaddr_in& srcAddr);
