@@ -1,14 +1,47 @@
 #include "info_fisio.h"
 
+
+
 bool validarInfoFisio(const char* buf) {
-    // formato esperado: <INFO_FISIO:PF_ID=03;PPM=56>
+    // formato esperado: <INFO_FISIO:PF_ID=03;PPM=56;CS=NN>
+    if (!buf) return false;
+    size_t len = strlen(buf);
+    if (len < 20 || strncmp(buf, "<INFO_FISIO:", 12) != 0) return false;
+
+    const char* cs_ptr = strstr(buf, ";CS=");
+    if (!cs_ptr) return false;
+
+    const char* end_ptr = strchr(cs_ptr, '>');
+    if (!end_ptr || *(end_ptr+1) != '\0') return false;
+
+   
+    char cs_val[3] = {0};
+    if (sscanf(cs_ptr, ";CS=%2[0-9A-Fa-f]>", cs_val) != 1) return false;
+    
+    // Calculo checksum
+    const char* sum_start = buf + 1; // despues de '<'
+    const char* sum_end = cs_ptr;
+    unsigned int checksum = 0;
+    for (const char* p = sum_start; p < sum_end; ++p) {
+        checksum += static_cast<unsigned char>(*p);
+    }
+    checksum = checksum % 256;
+
+    char computed_cs[3];
+    snprintf(computed_cs, sizeof(computed_cs), "%02X", checksum);
+    
+    // Comparo checksums
+    if (strcasecmp(cs_val, computed_cs) != 0) return false;
+
+    //trama valida, checksum valido, obtengo valores
+    int profile_id = 0, ppm = 0;
+    if (sscanf(buf, "<INFO_FISIO:PF_ID=%d;PPM=%d;", &profile_id, &ppm) != 2) return false;
+    
     if (strncmp(buf, "<INFO_FISIO:", 12) != 0) return false;
 
-    int profile_id = 0;
     if (sscanf(buf, "<INFO_FISIO:PF_ID=%d;", &profile_id) != 1) return false;
     if (profile_id < 1) return false;
 
-    int ppm = 0;
     if (sscanf(buf, "<INFO_FISIO:PF_ID=%*d;PPM=%d>", &ppm) != 1) return false;
     if (!(ppm >= 30 && ppm <= 220)) return false;
 

@@ -26,6 +26,7 @@ public:
 
 private slots:
     void onNavChanged(int row);
+    void onPosibleCaida();
 
 private:
     Database* db_ = nullptr;

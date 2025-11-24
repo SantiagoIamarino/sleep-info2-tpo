@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QFrame>
+#include <QMessageBox>
 
 // Helper para separadores
 static QFrame* hline() {
@@ -75,6 +76,7 @@ void MainWindow::StartLiveClient() {
         connect(live, &LiveClient::newLiveEvent, this, [this](const QString& s){ // log en vivo
             logLive_->appendPlainText(s);
         });
+        connect(live, &LiveClient::posibleCaidaEvent, this, &MainWindow::onPosibleCaida);
     } else {
         logLive_->appendPlainText("ERROR: no se pudo iniciar LiveClient.");
     }
@@ -93,6 +95,33 @@ void MainWindow::onNavChanged(int row) {
 
     if (row >= 0 && row < pages_->count())
         pages_->setCurrentIndex(row);
+}
+
+bool caida_detectada_en_curso = false;
+
+void MainWindow::onPosibleCaida()
+{
+    if(caida_detectada_en_curso) return;
+
+    caida_detectada_en_curso = true;
+
+    // Crear popup
+    QMessageBox box(this);
+    box.setWindowTitle("Alerta de caída");
+    box.setText("Se ha detectado una caída, ¿Está todo bien?");
+    QPushButton* btnOk = box.addButton("Sí, todo bien", QMessageBox::AcceptRole);
+
+    box.setIcon(QMessageBox::Warning);
+
+    box.exec();
+
+    if (box.clickedButton() == btnOk) {
+        QString trama = QString("<CAIDA_OK>");
+        auto live_send = new LiveClient(this);
+        live_send->start(5005);
+        live_send->send(trama);
+        caida_detectada_en_curso = false;
+    }
 }
 
 QWidget* MainWindow::buildPerfilesPage() {

@@ -4,6 +4,7 @@
 
 #include "commands.h"
 #include "info_fisio.h"
+#include "utils/checksum.h"
 
 static int ESP32_fd = -1;
 static sockaddr_in ESP32_addr{};
@@ -14,6 +15,8 @@ enum class TipoMensaje {
     PING,
     REQ_CONFIG,
     CFG_UPDATE,
+    POSIBLE_CAIDA,
+    CAIDA_OK,
     UNKNOWN
 };
 
@@ -22,6 +25,8 @@ TipoMensaje detectarTipo(const char* buf) {
     if (strncmp(buf, "<CFG_UPDATE:", 12) == 0)      return TipoMensaje::CFG_UPDATE;
     if (strncmp(buf, "<INFO_FISIO:", 12) == 0) return TipoMensaje::INFO_FISIO;
     if (strncmp(buf, "<ACK_REQ_CONFIG>", 16) == 0) return TipoMensaje::ACK_CONFIG;
+    if (strncmp(buf, "<POSIBLE_CAIDA>", 15) == 0) return TipoMensaje::POSIBLE_CAIDA;
+    if (strncmp(buf, "<CAIDA_OK>", 10) == 0) return TipoMensaje::CAIDA_OK;
     if (strncmp(buf, "<PING>", 6) == 0) return TipoMensaje::PING;
     return TipoMensaje::UNKNOWN;
 }
@@ -76,17 +81,16 @@ bool responderConfigUDP(int sockfd, const sockaddr_in& dst, bool es_update) {
         // formato: <CFG:PF_ID=01;HORAS_SUENIO=08;ALARMA_ON=TRUE;LUZ_ON=FALSE>
         char payload[96];
         if(!es_update) {
-            //  mandar un ACK primero
-            const char* ack = "<ACK_REQ_CONFIG>";
-            sendto(sockfd, ack, strlen(ack), 0, (const sockaddr*)&dst, sizeof(dst));
             snprintf(payload, sizeof(payload),
-                 "<CFG:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s>",
+                 "<CFG:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s",
                  profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0));
         } else {
             snprintf(payload, sizeof(payload),
-                 "<CFG_UPDATE:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s>",
+                 "<CFG_UPDATE:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s",
                  profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0));
         }
+
+        addChecksum(payload);
 
         ssize_t sent = sendto(sockfd, payload, strlen(payload), 0,
                               (const sockaddr*)&dst, sizeof(dst));
@@ -122,10 +126,38 @@ void procesarMensaje(const char* buf, int sockfd, const sockaddr_in& srcAddr) {
                 guardarInfoFisio(buf);
                 enviarLiveDataCliente(sockfd, buf);
             } else {
-                std::cerr << "[WARN] Formato invalido en INFO_FISIO: " << buf << "\n";
+                std::cerr << "[WARN] Formato invalido o checksum error en INFO_FISIO: " << buf << "\n";
             }
             break;
         }
+
+        case TipoMensaje::POSIBLE_CAIDA:
+            std::cout << "[POSIBLE_CAIDA] Alerta de posible caida recibida: " << buf << "\n";
+            // Enviar alerta a la UI
+            {
+                std::string json = R"({"type":"POSIBLE_CAIDA","message":"Posible caida detectada"})";
+                sendJsonToUI(sockfd, json);
+
+                if(ESP32_fd != -1) {
+                    const char* ack = "<ACK_POSIBLE_CAIDA>";
+                    sendto(ESP32_fd, ack, strlen(ack), 0,
+                           (const sockaddr*)&ESP32_addr, sizeof(ESP32_addr));
+                }
+            }
+            break;
+        
+        case TipoMensaje::CAIDA_OK:
+            std::cout << "[CAIDA_OK] Todo ok, no hay caida: " << buf << "\n";
+            // Enviar notificacion al lpc
+            {
+                if(ESP32_fd != -1) {
+                    const char* tr = "<CAIDA_OK>";
+                    std::cout << "[CAIDA_OK] Enviando confirmacion de caida ok.\n";
+                    sendto(ESP32_fd, tr, strlen(tr), 0,
+                           (const sockaddr*)&ESP32_addr, sizeof(ESP32_addr));
+                }
+            }
+            break;
 
         case TipoMensaje::ACK_CONFIG:
             std::cout << "[ACK] Configuracion confirmada.\n";

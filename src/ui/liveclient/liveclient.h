@@ -25,6 +25,7 @@ public:
 signals:
     void newPPM(int ppm);
     void newLiveEvent(QString s);
+    void posibleCaidaEvent();
 
 private:
     void onReadyRead();

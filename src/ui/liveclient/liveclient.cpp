@@ -27,6 +27,11 @@ void LiveClient::onReadyRead() {
             int ppm = obj.value("ppm").toInt(-1);
             if (ppm >= 0) emit newPPM(ppm);
         }
+
+        if(type == "POSIBLE_CAIDA") {
+            emit posibleCaidaEvent();
+        }
+
     }
 }
 
