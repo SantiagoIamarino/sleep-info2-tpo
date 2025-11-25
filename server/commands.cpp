@@ -43,7 +43,7 @@ bool responderConfigUDP(int sockfd, const sockaddr_in& dst, bool es_update) {
 
     // Trae la config del perfil seleccionado
     const char* SQL =
-        "SELECT ps.profile_id, sc.horas_suenio, sc.alarma_on, sc.luz_on "
+        "SELECT ps.profile_id, sc.horas_suenio, sc.alarma_on, sc.luz_on, sc.hora_limite "
         "FROM suenio_config sc "
         "JOIN profile_selected ps ON sc.profile_id = ps.profile_id "
         "LIMIT 1;";
@@ -62,6 +62,10 @@ bool responderConfigUDP(int sockfd, const sockaddr_in& dst, bool es_update) {
         int horas   = sqlite3_column_int(st, 1);
         int alarma  = sqlite3_column_int(st, 2); // 0/1
         int luz     = sqlite3_column_int(st, 3); // 0/1
+        const char* hora_limite = reinterpret_cast<const char*>(sqlite3_column_text(st, 4));
+        if (!hora_limite) {
+            hora_limite = "00:00";
+        }
 
         // parsea profile_id a 2 digitos ej: 1 = 01
         char profile_id_str[3];
@@ -78,16 +82,51 @@ bool responderConfigUDP(int sockfd, const sockaddr_in& dst, bool es_update) {
         hs[1] = '0' + (horas % 10);
         hs[2] = '\0';
 
-        // formato: <CFG:PF_ID=01;HORAS_SUENIO=08;ALARMA_ON=TRUE;LUZ_ON=FALSE>
+        // hora_limite viene como "HH:MM" desde la DB
+        int hh_lim = (hora_limite[0] - '0')*10 + (hora_limite[1] - '0');
+        int mm_lim = (hora_limite[3] - '0')*10 + (hora_limite[4] - '0');
+
+        // hora actual
+        time_t now = time(nullptr);
+        struct tm local_tm{};
+        localtime_r(&now, &local_tm);
+
+        int secs_now = local_tm.tm_hour * 3600
+                    + local_tm.tm_min  * 60
+                    + local_tm.tm_sec;
+
+        int secs_lim = hh_lim * 3600 + mm_lim * 60;
+
+        int diff = secs_lim - secs_now;
+        if (diff < 0) diff += 24 * 3600; // día siguiente
+
+        // convertir diff → HH:MM:SS
+        int rem_h = diff / 3600;
+        int rem_m = (diff % 3600) / 60;
+        int rem_s = diff % 60;
+
+        // construir string HH:MM:SS
+        char hora_restante_str[9];
+        hora_restante_str[0] = '0' + (rem_h / 10);
+        hora_restante_str[1] = '0' + (rem_h % 10);
+        hora_restante_str[2] = ':';
+        hora_restante_str[3] = '0' + (rem_m / 10);
+        hora_restante_str[4] = '0' + (rem_m % 10);
+        hora_restante_str[5] = ':';
+        hora_restante_str[6] = '0' + (rem_s / 10);
+        hora_restante_str[7] = '0' + (rem_s % 10);
+        hora_restante_str[8] = '\0';
+
+        // formato: <CFG:PF_ID=01;HORAS_SUENIO=08;ALARMA_ON=TRUE;LUZ_ON=FALSE;HORA_LIMITE=HH:MM>
         char payload[96];
         if(!es_update) {
             snprintf(payload, sizeof(payload),
-                 "<CFG:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s",
-                 profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0));
+                 "<CFG:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s;HORA_LIMITE=%s",
+                 profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0), hora_restante_str);
         } else {
             snprintf(payload, sizeof(payload),
-                 "<CFG_UPDATE:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s",
-                 profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0));
+                 "<CFG_UPDATE:PF_ID=%s;HORAS_SUENIO=%s;ALARMA_ON=%s;LUZ_ON=%s;HORA_LIMITE=%s",
+                 profile_id_str, hs, b2s(alarma != 0), b2s(luz != 0), hora_restante_str);
         }
 
         addChecksum(payload);

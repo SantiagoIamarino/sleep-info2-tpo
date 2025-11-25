@@ -78,6 +78,13 @@ void PageHistorial::cargarHistorial()
 
     chart_->removeAllSeries();
     axisX_->clear();
+    // --- CASO SIN DATOS ---
+    if (yVals.isEmpty()) {
+        chart_->setTitle("No hay datos para mostrar.");
+        axisY_->setTitleText("");
+        axisY_->setRange(0, 1);          // algo neutro para que se vea el fondo
+        return;                          // no seguimos armando series
+    }
     axisX_->append(xLabels);
 
     if (metrica == "Horas de sueño") {

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QTimeEdit>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -31,6 +32,7 @@ private slots:
 
 private:
     int profileId_;
+    QTimeEdit* timeHoraLimite_ = nullptr;
     QSpinBox*  spHorasSuenio_ = nullptr;
     QCheckBox* chkAlarmaOn_   = nullptr;
     QCheckBox* chkLuzOn_      = nullptr;
